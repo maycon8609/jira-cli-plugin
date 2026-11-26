@@ -1,0 +1,293 @@
+#!/usr/bin/env python3
+"""
+Jira Task Viewer CLI (Standalone)
+Fetches and formats Jira issues in clean Markdown without any external dependencies.
+"""
+
+import sys
+import os
+import json
+import base64
+import re
+import argparse
+from urllib.request import Request, urlopen
+from urllib.error import HTTPError, URLError
+from pathlib import Path
+
+CONFIG_DIR = Path.home() / ".config" / "jira"
+CONFIG_FILE = CONFIG_DIR / "config.json"
+
+
+def load_config():
+    """Load configuration from environment variables or ~/.config/jira/config.json."""
+    config = {
+        "url": os.environ.get("JIRA_BASE_URL") or os.environ.get("JIRA_URL") or "",
+        "email": os.environ.get("JIRA_EMAIL") or os.environ.get("JIRA_USER") or "",
+        "token": os.environ.get("JIRA_API_TOKEN") or os.environ.get("JIRA_TOKEN") or "",
+    }
+
+    if CONFIG_FILE.is_file():
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if not config["url"]:
+                    config["url"] = data.get("url") or data.get("jira_url") or ""
+                if not config["email"]:
+                    config["email"] = data.get("email") or data.get("user") or ""
+                if not config["token"]:
+                    config["token"] = data.get("token") or data.get("api_token") or ""
+        except Exception as e:
+            sys.stderr.write(f"Warning: Failed to read {CONFIG_FILE}: {e}\n")
+
+    return config
+
+
+def save_config(url, email, token):
+    """Save configuration to ~/.config/jira/config.json with 0600 permissions."""
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "url": url.rstrip("/"),
+        "email": email.strip(),
+        "token": token.strip(),
+    }
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
+    os.chmod(CONFIG_FILE, 0o600)
+    print(f"Configuração salva em: {CONFIG_FILE} (permissões 0600)")
+
+
+def normalize_issue_key(key_or_url: str) -> str:
+    """Extract standard issue key (e.g. IT-123) from string, number or URL."""
+    val = key_or_url.strip()
+    # Check if URL
+    m_url = re.search(r"/browse/([A-Za-z0-9]+-\d+)", val)
+    if m_url:
+        return m_url.group(1).upper()
+
+    # If it's like IT-123 or it-123
+    m_key = re.search(r"([A-Za-z]+-\d+)", val)
+    if m_key:
+        return m_key.group(1).upper()
+
+    # If user just typed numbers, e.g. 790, try to detect project prefix from config or error
+    return val.upper()
+
+
+def adf_to_markdown(node, indent=0) -> str:
+    """Recursively convert Jira Atlassian Document Format (ADF) to clean Markdown."""
+    if not node or not isinstance(node, dict):
+        return ""
+    ntype = node.get("type", "")
+    content = node.get("content", [])
+
+    if ntype == "text":
+        text = node.get("text", "")
+        for mark in node.get("marks", []):
+            mtype = mark.get("type")
+            if mtype == "strong":
+                text = f"**{text}**"
+            elif mtype == "em":
+                text = f"*{text}*"
+            elif mtype == "strike":
+                text = f"~~{text}~~"
+            elif mtype == "code":
+                text = f"`{text}`"
+            elif mtype == "link":
+                href = mark.get("attrs", {}).get("href", "")
+                text = f"[{text}]({href})"
+        return text
+
+    if ntype == "hardBreak":
+        return "\n"
+
+    inner = "".join(adf_to_markdown(c, indent) for c in content)
+
+    if ntype == "doc":
+        return inner.strip()
+    elif ntype == "paragraph":
+        return inner + "\n\n"
+    elif ntype == "heading":
+        level = node.get("attrs", {}).get("level", 1)
+        return f"{'#' * level} {inner.strip()}\n\n"
+    elif ntype == "bulletList":
+        items = [f"{'  ' * indent}- {adf_to_markdown(item, indent + 1).strip()}" for item in content]
+        return "\n".join(items) + "\n\n"
+    elif ntype == "orderedList":
+        items = [f"{'  ' * indent}{i+1}. {adf_to_markdown(item, indent + 1).strip()}" for i, item in enumerate(content)]
+        return "\n".join(items) + "\n\n"
+    elif ntype == "listItem":
+        return inner
+    elif ntype == "codeBlock":
+        lang = node.get("attrs", {}).get("language", "")
+        return f"```{lang}\n{inner.strip()}\n```\n\n"
+    elif ntype == "blockquote":
+        lines = [f"> {line}" for line in inner.strip().split("\n")]
+        return "\n".join(lines) + "\n\n"
+    elif ntype == "rule":
+        return "---\n\n"
+    elif ntype == "table":
+        rows = [adf_to_markdown(r) for r in content]
+        return "\n".join(r for r in rows if r) + "\n\n"
+    elif ntype == "tableRow":
+        cells = [adf_to_markdown(c).replace("\n", " ").strip() for c in content]
+        return "| " + " | ".join(cells) + " |"
+    elif ntype in ("tableHeader", "tableCell"):
+        return inner.strip()
+    elif ntype == "inlineCard":
+        url = node.get("attrs", {}).get("url", "")
+        return f"<{url}>" if url else ""
+    return inner
+
+
+def fetch_issue(base_url, email, token, issue_key):
+    """Fetch issue details from Jira Cloud REST API v3."""
+    url = f"{base_url.rstrip('/')}/rest/api/3/issue/{issue_key}?expand=renderedFields,names"
+    auth_str = f"{email}:{token}".encode("utf-8")
+    auth_header = f"Basic {base64.b64encode(auth_str).decode('ascii')}"
+
+    req = Request(url, headers={
+        "Authorization": auth_header,
+        "Accept": "application/json",
+        "User-Agent": "Standalone-Jira-CLI/1.0"
+    })
+
+    try:
+        with urlopen(req, timeout=15) as res:
+            return json.loads(res.read().decode("utf-8"))
+    except HTTPError as e:
+        if e.code == 401:
+            sys.stderr.write("Erro 401: Autenticação falhou. Verifique o email e o API Token.\n")
+        elif e.code == 404:
+            sys.stderr.write(f"Erro 404: Tarefa '{issue_key}' não encontrada ou você não tem permissão para vê-la.\n")
+        else:
+            sys.stderr.write(f"Erro HTTP {e.code}: {e.reason}\n")
+        sys.exit(1)
+    except URLError as e:
+        sys.stderr.write(f"Erro de conexão com {base_url}: {e.reason}\n")
+        sys.exit(1)
+
+
+def format_issue(data, base_url, show_comments=True):
+    """Format issue into clean terminal/markdown output."""
+    fields = data.get("fields", {})
+    key = data.get("key", "")
+    summary = fields.get("summary", "")
+    status = fields.get("status", {}).get("name", "N/A")
+    itype = fields.get("issuetype", {}).get("name", "N/A")
+    priority = fields.get("priority", {}).get("name", "N/A")
+    assignee = fields.get("assignee")
+    assignee_name = assignee.get("displayName") if assignee else "Unassigned"
+    reporter = fields.get("reporter")
+    reporter_name = reporter.get("displayName") if reporter else "N/A"
+    created = fields.get("created", "")[:16].replace("T", " ")
+    updated = fields.get("updated", "")[:16].replace("T", " ")
+
+    desc_raw = fields.get("description")
+    if isinstance(desc_raw, dict):
+        description = adf_to_markdown(desc_raw).strip()
+    elif isinstance(desc_raw, str):
+        description = desc_raw.strip()
+    else:
+        description = "_Sem descrição._"
+
+    issue_url = f"{base_url.rstrip('/')}/browse/{key}"
+
+    lines = []
+    lines.append("=" * 80)
+    lines.append(f"[{key}] {summary}")
+    lines.append("=" * 80)
+    lines.append(f"Status:      {status}")
+    lines.append(f"Tipo:        {itype}")
+    lines.append(f"Prioridade:  {priority}")
+    lines.append(f"Responsável: {assignee_name}")
+    lines.append(f"Criado por:  {reporter_name}")
+    lines.append(f"Criado em:   {created} | Atualizado: {updated}")
+    lines.append(f"Link:        {issue_url}")
+    lines.append("-" * 80)
+    lines.append("DESCRIÇÃO:")
+    lines.append(description if description else "_Sem descrição._")
+
+    # Subtasks
+    subtasks = fields.get("subtasks", [])
+    if subtasks:
+        lines.append("-" * 80)
+        lines.append(f"SUBTASKS ({len(subtasks)}):")
+        for st in subtasks:
+            st_key = st.get("key", "")
+            st_summary = st.get("fields", {}).get("summary", "")
+            st_status = st.get("fields", {}).get("status", {}).get("name", "")
+            lines.append(f"- [{st_key}] {st_summary} ({st_status})")
+
+    # Comments
+    comment_data = fields.get("comment", {}).get("comments", [])
+    if show_comments and comment_data:
+        lines.append("-" * 80)
+        lines.append(f"COMENTÁRIOS (Últimos {min(3, len(comment_data))} de {len(comment_data)}):")
+        for c in comment_data[-3:]:
+            author = c.get("author", {}).get("displayName", "Autor")
+            c_date = c.get("created", "")[:16].replace("T", " ")
+            body = c.get("body")
+            if isinstance(body, dict):
+                c_text = adf_to_markdown(body).strip()
+            else:
+                c_text = str(body or "").strip()
+            lines.append(f"\n[{author} - {c_date}]:")
+            lines.append(c_text)
+
+    lines.append("=" * 80)
+    return "\n".join(lines)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Jira Task Viewer CLI - Consulta e formata tasks do Jira em Markdown limpo."
+    )
+    parser.add_argument("issue", nargs="?", help="Chave da tarefa (ex: IT-790) ou URL do card")
+    parser.add_argument("--config", action="store_true", help="Configurar URL, Email e Token interativamente")
+    parser.add_argument("--json", action="store_true", help="Exibir JSON bruto retornado pela API")
+    parser.add_argument("--no-comments", action="store_true", help="Ocultar comentários")
+
+    args = parser.parse_args()
+
+    if args.config:
+        print("--- Configuração do Jira CLI ---")
+        url = input("URL do Jira (ex: https://suaempresa.atlassian.net): ").strip()
+        email = input("Seu e-mail da conta Atlassian: ").strip()
+        token = input("Seu Atlassian API Token: ").strip()
+        if not url or not email or not token:
+            print("Erro: Todos os campos são obrigatórios.")
+            sys.exit(1)
+        save_config(url, email, token)
+        sys.exit(0)
+
+    config = load_config()
+
+    if not config["url"] or not config["email"] or not config["token"]:
+        sys.stderr.write(
+            "Configuração do Jira ausente ou incompleta.\n\n"
+            "Configure executando:\n"
+            "  jira --config\n\n"
+            f"Ou salve diretamente no arquivo: {CONFIG_FILE}\n"
+            "{\n"
+            '  "url": "https://suaempresa.atlassian.net",\n'
+            '  "email": "seu-email@dominio.com",\n'
+            '  "token": "seu-token-aqui"\n'
+            "}\n"
+        )
+        sys.exit(1)
+
+    if not args.issue:
+        parser.print_help()
+        sys.exit(1)
+
+    issue_key = normalize_issue_key(args.issue)
+    data = fetch_issue(config["url"], config["email"], config["token"], issue_key)
+
+    if args.json:
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+    else:
+        print(format_issue(data, config["url"], show_comments=not args.no_comments))
+
+
+if __name__ == "__main__":
+    main()

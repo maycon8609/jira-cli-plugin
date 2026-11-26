@@ -1,0 +1,19 @@
+{
+  "name": "jira-cli",
+  "displayName": "Jira Task Viewer CLI & Skill",
+  "version": "1.0.0",
+  "description": "Zero-dependency standalone Jira CLI and Agent Skill that renders tasks, subtasks, and comments in clean Markdown.",
+  "repository": "https://github.com/maycon8609/jira-cli-plugin",
+  "author": {
+    "name": "Maycon Silva"
+  },
+  "keywords": [
+    "jira",
+    "cli",
+    "agent-skill",
+    "antigravity",
+    "atlassian",
+    "markdown"
+  ],
+  "skills": ["skills/jira"]
+}

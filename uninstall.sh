@@ -20,4 +20,9 @@ if [ -L "$SKILL_DEST" ]; then
   echo "✓ Link da skill $SKILL_DEST removido."
 fi
 
+if [ -L "$HOME/.agents/skills/jira" ]; then
+  rm "$HOME/.agents/skills/jira"
+  echo "✓ Link da skill $HOME/.agents/skills/jira removido."
+fi
+
 echo "Desinstalação concluída."

@@ -25,10 +25,15 @@ ln -sf "$BIN_SRC" "$BIN_DEST"
 chmod +x "$BIN_SRC" "$BIN_DEST"
 echo "✓ Executável 'jira' linkado em $BIN_DEST"
 
-# 3. Instala skill no Antigravity / Gemini CLI
+# 3. Instala skill no Antigravity / Gemini CLI e ~/.agents
 if [ -d "$HOME/.gemini/config/skills" ]; then
   ln -sfn "$SKILL_SRC" "$SKILL_DEST"
   echo "✓ Skill 'jira' linkada em $SKILL_DEST"
+fi
+
+if [ -d "$HOME/.agents/skills" ]; then
+  ln -sfn "$SKILL_SRC" "$HOME/.agents/skills/jira"
+  echo "✓ Skill 'jira' linkada em $HOME/.agents/skills/jira"
 fi
 
 # 4. Verifica PATH

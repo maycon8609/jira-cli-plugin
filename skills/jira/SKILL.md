@@ -5,24 +5,25 @@ description: Fetches and formats Jira tasks, issues, subtasks, descriptions, and
 
 # Jira Task Viewer Skill
 
-Consulta e exibe detalhes de tarefas do Jira (resumo, descrição formatada, subtasks, responsáveis e últimos comentários) em Markdown limpo, sem dependências externas.
+Fetches and displays Jira task details (summary, formatted description, subtasks, assignees, and latest comments) in clean Markdown with zero external dependencies.
 
-## Como Usar
+## Usage
 
-Execute o comando `jira <KEY>` no terminal:
+Run the `jira <KEY>` command in the terminal:
 
 ```bash
 jira PROJ-123
 ```
 
-Ou passe a URL direta do card:
+Or pass the direct card URL:
+
 ```bash
-jira https://sua-empresa.atlassian.net/browse/PROJ-123
+jira https://your-domain.atlassian.net/browse/PROJ-123
 ```
 
-### Opções Disponíveis
+### Available Options
 
-- `jira PROJ-123`: Exibe visão completa com descrição, subtasks e comentários recentes.
-- `jira PROJ-123 --no-comments`: Oculta a seção de comentários.
-- `jira PROJ-123 --json`: Retorna os dados brutos da API em formato JSON.
-- `jira --config`: Permite reconfigurar a URL, o e-mail e o API Token de forma interativa.
+- `jira PROJ-123`: Displays complete view with description, subtasks, and recent comments.
+- `jira PROJ-123 --no-comments`: Hides the comments section.
+- `jira PROJ-123 --json`: Returns raw API data in JSON format.
+- `jira --config`: Interactively reconfigures URL, email, and API Token.

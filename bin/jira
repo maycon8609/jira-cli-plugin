@@ -53,23 +53,22 @@ def save_config(url, email, token):
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2)
     os.chmod(CONFIG_FILE, 0o600)
-    print(f"Configuração salva em: {CONFIG_FILE} (permissões 0600)")
+    print(f"Configuration saved to: {CONFIG_FILE} (permissions 0600)")
 
 
 def normalize_issue_key(key_or_url: str) -> str:
-    """Extract standard issue key (e.g. IT-123) from string, number or URL."""
+    """Extract standard issue key (e.g. PROJ-123) from string, number or URL."""
     val = key_or_url.strip()
     # Check if URL
     m_url = re.search(r"/browse/([A-Za-z0-9]+-\d+)", val)
     if m_url:
         return m_url.group(1).upper()
 
-    # If it's like IT-123 or it-123
+    # If it's like PROJ-123 or proj-123
     m_key = re.search(r"([A-Za-z]+-\d+)", val)
     if m_key:
         return m_key.group(1).upper()
 
-    # If user just typed numbers, e.g. 790, try to detect project prefix from config or error
     return val.upper()
 
 
@@ -156,14 +155,14 @@ def fetch_issue(base_url, email, token, issue_key):
             return json.loads(res.read().decode("utf-8"))
     except HTTPError as e:
         if e.code == 401:
-            sys.stderr.write("Erro 401: Autenticação falhou. Verifique o email e o API Token.\n")
+            sys.stderr.write("Error 401: Authentication failed. Please check your email and API Token.\n")
         elif e.code == 404:
-            sys.stderr.write(f"Erro 404: Tarefa '{issue_key}' não encontrada ou você não tem permissão para vê-la.\n")
+            sys.stderr.write(f"Error 404: Issue '{issue_key}' not found or you don't have permission to view it.\n")
         else:
-            sys.stderr.write(f"Erro HTTP {e.code}: {e.reason}\n")
+            sys.stderr.write(f"HTTP Error {e.code}: {e.reason}\n")
         sys.exit(1)
     except URLError as e:
-        sys.stderr.write(f"Erro de conexão com {base_url}: {e.reason}\n")
+        sys.stderr.write(f"Connection error with {base_url}: {e.reason}\n")
         sys.exit(1)
 
 
@@ -188,7 +187,7 @@ def format_issue(data, base_url, show_comments=True):
     elif isinstance(desc_raw, str):
         description = desc_raw.strip()
     else:
-        description = "_Sem descrição._"
+        description = "_No description._"
 
     issue_url = f"{base_url.rstrip('/')}/browse/{key}"
 
@@ -197,15 +196,15 @@ def format_issue(data, base_url, show_comments=True):
     lines.append(f"[{key}] {summary}")
     lines.append("=" * 80)
     lines.append(f"Status:      {status}")
-    lines.append(f"Tipo:        {itype}")
-    lines.append(f"Prioridade:  {priority}")
-    lines.append(f"Responsável: {assignee_name}")
-    lines.append(f"Criado por:  {reporter_name}")
-    lines.append(f"Criado em:   {created} | Atualizado: {updated}")
+    lines.append(f"Type:        {itype}")
+    lines.append(f"Priority:    {priority}")
+    lines.append(f"Assignee:    {assignee_name}")
+    lines.append(f"Reporter:    {reporter_name}")
+    lines.append(f"Created:     {created} | Updated: {updated}")
     lines.append(f"Link:        {issue_url}")
     lines.append("-" * 80)
-    lines.append("DESCRIÇÃO:")
-    lines.append(description if description else "_Sem descrição._")
+    lines.append("DESCRIPTION:")
+    lines.append(description if description else "_No description._")
 
     # Subtasks
     subtasks = fields.get("subtasks", [])
@@ -222,9 +221,9 @@ def format_issue(data, base_url, show_comments=True):
     comment_data = fields.get("comment", {}).get("comments", [])
     if show_comments and comment_data:
         lines.append("-" * 80)
-        lines.append(f"COMENTÁRIOS (Últimos {min(3, len(comment_data))} de {len(comment_data)}):")
+        lines.append(f"COMMENTS (Latest {min(3, len(comment_data))} of {len(comment_data)}):")
         for c in comment_data[-3:]:
-            author = c.get("author", {}).get("displayName", "Autor")
+            author = c.get("author", {}).get("displayName", "Author")
             c_date = c.get("created", "")[:16].replace("T", " ")
             body = c.get("body")
             if isinstance(body, dict):
@@ -240,22 +239,22 @@ def format_issue(data, base_url, show_comments=True):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Jira Task Viewer CLI - Consulta e formata tasks do Jira em Markdown limpo."
+        description="Jira Task Viewer CLI - Fetches and formats Jira issues in clean Markdown."
     )
-    parser.add_argument("issue", nargs="?", help="Chave da tarefa (ex: IT-790) ou URL do card")
-    parser.add_argument("--config", action="store_true", help="Configurar URL, Email e Token interativamente")
-    parser.add_argument("--json", action="store_true", help="Exibir JSON bruto retornado pela API")
-    parser.add_argument("--no-comments", action="store_true", help="Ocultar comentários")
+    parser.add_argument("issue", nargs="?", help="Issue key (e.g. PROJ-123) or card URL")
+    parser.add_argument("--config", action="store_true", help="Configure URL, Email, and Token interactively")
+    parser.add_argument("--json", action="store_true", help="Output raw JSON returned by Jira API")
+    parser.add_argument("--no-comments", action="store_true", help="Hide comments section")
 
     args = parser.parse_args()
 
     if args.config:
-        print("--- Configuração do Jira CLI ---")
-        url = input("URL do Jira (ex: https://suaempresa.atlassian.net): ").strip()
-        email = input("Seu e-mail da conta Atlassian: ").strip()
-        token = input("Seu Atlassian API Token: ").strip()
+        print("--- Jira CLI Configuration ---")
+        url = input("Jira URL (e.g. https://your-domain.atlassian.net): ").strip()
+        email = input("Your Atlassian account email: ").strip()
+        token = input("Your Atlassian API Token: ").strip()
         if not url or not email or not token:
-            print("Erro: Todos os campos são obrigatórios.")
+            print("Error: All fields are required.")
             sys.exit(1)
         save_config(url, email, token)
         sys.exit(0)
@@ -264,14 +263,14 @@ def main():
 
     if not config["url"] or not config["email"] or not config["token"]:
         sys.stderr.write(
-            "Configuração do Jira ausente ou incompleta.\n\n"
-            "Configure executando:\n"
+            "Jira configuration missing or incomplete.\n\n"
+            "Configure by running:\n"
             "  jira --config\n\n"
-            f"Ou salve diretamente no arquivo: {CONFIG_FILE}\n"
+            f"Or save directly to file: {CONFIG_FILE}\n"
             "{\n"
-            '  "url": "https://suaempresa.atlassian.net",\n'
-            '  "email": "seu-email@dominio.com",\n'
-            '  "token": "seu-token-aqui"\n'
+            '  "url": "https://your-domain.atlassian.net",\n'
+            '  "email": "your-email@domain.com",\n'
+            '  "token": "your-api-token"\n'
             "}\n"
         )
         sys.exit(1)

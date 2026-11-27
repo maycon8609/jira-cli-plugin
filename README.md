@@ -1,32 +1,32 @@
 # Jira Task Viewer CLI & Skill
 
-CLI leve e independente (zero dependências externas) e Skill para agentes de IA para consultar tarefas, subtasks e comentários do Jira Cloud em Markdown limpo.
+Lightweight, standalone CLI (zero external dependencies) and AI Agent Skill to fetch, parse, and view Jira Cloud tasks, subtasks, and comments in clean Markdown.
 
-## Recursos
+## Features
 
-- **Zero dependências externas**: Construído puramente com a biblioteca padrão do Python (`urllib`, `json`, `argparse`).
-- **Renderização limpa de ADF**: Converte o Atlassian Document Format (ADF) diretamente em Markdown legível no terminal ou para o agente de IA.
-- **Configuração segura**: Credenciais salvas localmente em `~/.config/jira/config.json` com permissões restritas (`600`).
-- **Suporte a agentes**: Funciona como CLI interativo e como Skill para o ecossistema Antigravity / Gemini CLI.
+- **Zero External Dependencies**: Built entirely with Python's standard library (`urllib`, `json`, `argparse`).
+- **Clean ADF Rendering**: Recursively parses Atlassian Document Format (ADF) into readable Markdown for terminals and AI agents.
+- **Secure Configuration**: Stores credentials locally in `~/.config/jira/config.json` with strict user-only permissions (`0600`), or via environment variables.
+- **AI Agent Skill**: Ready-to-use skill compatible with Antigravity and Agent ecosystems.
 
 ---
 
-## Como Obter as Credenciais do Jira
+## How to Get Your Jira Credentials
 
-1. Acesse o gerenciador de tokens da Atlassian:
+1. Go to Atlassian API Tokens management:  
    👉 [https://id.atlassian.com/manage-profile/security/api-tokens](https://id.atlassian.com/manage-profile/security/api-tokens)
-2. Clique em **Criar token de API**.
-3. Dê um nome ao token (ex: `jira-cli`) e copie o valor gerado.
-4. Anote:
-   - **URL do Jira**: ex: `https://sua-empresa.atlassian.net`
-   - **E-mail**: o mesmo e-mail da sua conta Atlassian
-   - **API Token**: o token gerado no passo 3
+2. Click **Create API token**.
+3. Label your token (e.g., `jira-cli`) and copy the generated secret.
+4. Keep the following information handy:
+   - **Jira URL**: e.g., `https://your-domain.atlassian.net`
+   - **Email**: your Atlassian account email address
+   - **API Token**: the token created in step 3
 
 ---
 
-## Instalação Rápida
+## Quick Installation
 
-Clone o repositório e execute o instalador:
+Clone the repository and run the installer:
 
 ```bash
 git clone git@github.com:maycon8609/jira-cli-plugin.git
@@ -34,142 +34,132 @@ cd jira-cli-plugin
 ./install.sh
 ```
 
-O script criará o link simbólico do executável `jira` em `~/.local/bin/` e registrará a skill para o agente.
+The script symlinks the `jira` binary to `~/.local/bin/` and registers the skill for AI agent workflows.
 
 ---
 
-## Como Configurar
+## Configuration
 
-Você pode configurar suas credenciais de 3 formas, dependendo do seu fluxo de trabalho:
+You can configure your credentials using any of the 3 approaches below:
 
-### 1. Modo Interativo (Mais Prático)
+### 1. Interactive Setup (Recommended)
 
-Basta rodar no seu terminal:
+Run directly in your terminal:
 
 ```bash
 jira --config
 ```
 
-O assistente solicitará a URL base do Jira, seu e-mail e o API Token gerado na Atlassian, criando o arquivo de configuração automaticamente com permissões restritas de leitura/escrita.
+The wizard prompts for your Jira URL, email, and API Token, writing the configuration automatically with secure `0600` permissions.
 
 ---
 
-### 2. Criação Manual do Arquivo de Configuração
+### 2. Manual Configuration File
 
-Se preferir criar o arquivo diretamente ou via script sem passar pelo prompt interativo:
+If you prefer to configure directly or via a shell script without interactive prompts:
 
-1. **Crie a pasta de configuração:**
-
+1. **Create the configuration directory:**
    ```bash
    mkdir -p ~/.config/jira
    ```
 
-2. **Crie o arquivo `~/.config/jira/config.json`:**
-
+2. **Create `~/.config/jira/config.json`:**
    ```json
    {
-     "url": "https://sua-empresa.atlassian.net",
-     "email": "seu-email@dominio.com",
-     "token": "seu-token-aqui"
+     "url": "https://your-domain.atlassian.net",
+     "email": "your-email@domain.com",
+     "token": "your-api-token"
    }
    ```
 
-   > **Dica (One-liner no terminal):**
-   >
+   > **One-liner shortcut:**
    > ```bash
    > cat << 'EOF' > ~/.config/jira/config.json
    > {
-   >   "url": "https://sua-empresa.atlassian.net",
-   >   "email": "seu-email@dominio.com",
-   >   "token": "SEU_API_TOKEN"
+   >   "url": "https://your-domain.atlassian.net",
+   >   "email": "your-email@domain.com",
+   >   "token": "YOUR_API_TOKEN"
    > }
    > EOF
    > ```
 
-3. **Restrinja as permissões por segurança:**
-   Proteja o arquivo para que apenas o seu usuário do sistema operacional possa lê-lo ou editá-lo:
+3. **Restrict permissions:**
    ```bash
    chmod 600 ~/.config/jira/config.json
    ```
 
 ---
 
-### 3. Variáveis de Ambiente (CI/CD, Containers e Sessões)
+### 3. Environment Variables (CI/CD, Containers, and Sessions)
 
-O CLI suporta variáveis de ambiente nativamente. Elas são a melhor escolha para:
+The CLI natively supports environment variables, ideal for:
+- CI/CD pipelines (GitHub Actions, GitLab CI, Bitbucket Pipelines).
+- Docker / Podman container environments where disk persistence is discouraged.
+- Shared machines or temporary terminal sessions.
 
-- Pipelines de CI/CD (GitHub Actions, GitLab CI, Bitbucket Pipelines).
-- Ambientes de contêineres Docker / Podman onde nenhum arquivo deve ser gravado em disco.
-- Máquinas compartilhadas ou sessões temporárias de terminal.
+#### Precedence:
+Environment variables take **full precedence** over `~/.config/jira/config.json`. If an environment variable is set, the CLI prioritizes its value.
 
-#### Precedência:
+#### Supported Variables:
 
-As variáveis de ambiente **possuem precedência total** sobre o arquivo `~/.config/jira/config.json`. Se uma variável de ambiente estiver definida, o CLI usará o valor dela em vez do que estiver no arquivo.
+| Setting | Primary Variable | Alias | Example |
+|---|---|---|---|
+| **Base URL** | `JIRA_URL` | `JIRA_BASE_URL` | `https://your-domain.atlassian.net` |
+| **Email** | `JIRA_EMAIL` | `JIRA_USER` | `your-email@domain.com` |
+| **API Token** | `JIRA_TOKEN` | `JIRA_API_TOKEN` | `ATATT3xFfGF0...` |
 
-#### Variáveis Suportadas:
+#### How to Set:
 
-O CLI aceita tanto o formato padrão quanto apelidos comuns:
-
-| Configuração  | Variável Principal | Variável Alternativa (Alias) | Exemplo                             |
-| ------------- | ------------------ | ---------------------------- | ----------------------------------- |
-| **URL Base**  | `JIRA_URL`         | `JIRA_BASE_URL`              | `https://sua-empresa.atlassian.net` |
-| **E-mail**    | `JIRA_EMAIL`       | `JIRA_USER`                  | `seu-email@dominio.com`             |
-| **API Token** | `JIRA_TOKEN`       | `JIRA_API_TOKEN`             | `ATATT3xFfGF0...`                   |
-
-#### Como Definir:
-
-- **Para a sessão atual do terminal:**
-
+- **For the current terminal session:**
   ```bash
-  export JIRA_URL="https://sua-empresa.atlassian.net"
-  export JIRA_EMAIL="seu-email@dominio.com"
-  export JIRA_TOKEN="seu-token-aqui"
+  export JIRA_URL="https://your-domain.atlassian.net"
+  export JIRA_EMAIL="your-email@domain.com"
+  export JIRA_TOKEN="your-api-token"
   ```
 
-- **De forma persistente para o seu usuário (via shell profile):**
-  Adicione os exports no seu arquivo `~/.bashrc` ou `~/.zshrc`:
-
+- **Persistently in your shell profile:**
+  Add the exports to your `~/.bashrc` or `~/.zshrc`:
   ```bash
-  echo 'export JIRA_URL="https://sua-empresa.atlassian.net"' >> ~/.bashrc
-  echo 'export JIRA_EMAIL="seu-email@dominio.com"' >> ~/.bashrc
-  echo 'export JIRA_TOKEN="seu-token-aqui"' >> ~/.bashrc
+  echo 'export JIRA_URL="https://your-domain.atlassian.net"' >> ~/.bashrc
+  echo 'export JIRA_EMAIL="your-email@domain.com"' >> ~/.bashrc
+  echo 'export JIRA_TOKEN="your-api-token"' >> ~/.bashrc
   source ~/.bashrc
   ```
 
-- **Em pipelines do GitHub Actions (Exemplo):**
+- **In GitHub Actions workflows (Example):**
   ```yaml
-  - name: Consultar Tarefa no Jira
+  - name: Fetch Jira Issue
     env:
       JIRA_URL: ${{ secrets.JIRA_URL }}
       JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
       JIRA_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
     run: |
-      jira IT-123
+      jira PROJ-123
   ```
 
 ---
 
-## Como Usar
+## Usage
 
-### Consultar uma tarefa pelo ID:
+### Fetch an issue by key:
 
 ```bash
 jira PROJ-123
 ```
 
-### Consultar pela URL completa:
+### Fetch using direct issue URL:
 
 ```bash
-jira https://sua-empresa.atlassian.net/browse/PROJ-123
+jira https://your-domain.atlassian.net/browse/PROJ-123
 ```
 
-### Ocultar comentários:
+### Hide comments section:
 
 ```bash
 jira PROJ-123 --no-comments
 ```
 
-### Exibir resposta em JSON puro:
+### Output raw JSON response:
 
 ```bash
 jira PROJ-123 --json
@@ -177,10 +167,14 @@ jira PROJ-123 --json
 
 ---
 
-## Desinstalação
+## Uninstallation
 
-Para remover os links criados:
+To remove symlinks created during installation:
 
 ```bash
 ./uninstall.sh
 ```
+
+## License
+
+MIT
